@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Multi‑Engine Browser – Pro MVP</title>
+  <style>
+    :root{
+      --bg: #0b0c10; --panel:#111319; --muted:#1b1f2a; --text:#e9eef6; --sub:#b9c2d0;
+      --brand:#6aa3ff; --brand-2:#9bffce; --accent:#ffe082; --danger:#ff6b6b;
+      --shadow: 0 10px 25px rgba(0,0,0,.25);
+      --border: 1px solid rgba(255,255,255,.08);
+    }
+    [data-theme="light"]{ --bg:#f7fafc; --panel:#ffffff; --muted:#eef2f7; --text:#0f172a; --sub:#475569; --brand:#2563eb; --brand-2:#10b981; --accent:#f59e0b; --danger:#ef4444; --border:1px solid rgba(15,23,42,.08) }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;}
+    .app{display:grid;grid-template-rows:auto auto auto 1fr;gap:.5rem;max-width:1400px;margin:0 auto;padding:1rem}
+    .topbar{display:flex;gap:.5rem;align-items:center;background:var(--panel);padding:.75rem;border-radius:14px;box-shadow:var(--shadow);border:var(--border)}
+    select, input, button{border:0;outline:0}
+    select, input{background:var(--muted);color:var(--text);padding:.6rem .8rem;border-radius:12px;border:var(--border)}
+    select{min-width:170px}
+    .btn{background:var(--brand);color:white;padding:.6rem .9rem;border-radius:12px;cursor:pointer;border:var(--border)}
+    .btn.ghost{background:var(--muted);color:var(--text)}
+    .btn.red{background:var(--danger)}
+    .btn.yellow{background:var(--accent);color:#0f172a}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .spacer{flex:1}
+    .tabs-wrap{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.5rem}
+    .tabs{display:flex;gap:.5rem;overflow:auto;padding:0 .25rem}
+    .tab{display:flex;align-items:center;gap:.5rem;background:var(--panel);border:1px solid transparent;padding:.4rem .6rem;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)}
+    .tab.active{border-color:var(--brand)}
+    .tab .close{opacity:.7}
+    .tab .close:hover{opacity:1}
+    .tab[draggable="true"]{user-select:none}
+    .group-chip{background:var(--muted);padding:.25rem .5rem;border-radius:999px;border:var(--border);cursor:pointer}
+    .group-chip.active{outline:2px solid var(--brand)}
+
+    .browser{display:grid;grid-template-rows:auto auto 1fr;gap:.5rem;min-height:60vh}
+    .nav{display:flex;gap:.4rem;align-items:center}
+    .history-chip{background:var(--muted);padding:.2rem .5rem;border-radius:999px;font-size:.8rem;cursor:pointer;border:var(--border)}
+    iframe{width:100%;height:100%;border:0;border-radius:14px;background:var(--panel)}
+    .hint{font-size:.85rem;color:var(--sub)}
+    .pill{padding:.35rem .6rem;border-radius:999px;background:var(--muted);border:var(--border)}
+
+    .mini-player{position:fixed;right:16px;bottom:16px;width:360px;max-width:90vw;height:203px;z-index:50;box-shadow:var(--shadow);border-radius:12px;overflow:hidden;border:2px solid var(--brand);background:black}
+    .mini-header{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:.3rem .5rem}
+    .drag{cursor:move;color:var(--sub);font-size:.8rem}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:var(--muted);padding:.15rem .35rem;border-radius:6px;font-size:.85rem;border:var(--border)}
+
+    .panel{background:var(--panel);border-radius:14px;padding:.6rem;border:var(--border)}
+    .qa{display:none}
+
+    /* Split view */
+    .split-wrap{position:relative;display:grid;grid-template-columns:1fr;gap:.5rem}
+    .split.two{grid-template-columns:var(--left, 1fr) 8px var(--right, 1fr)}
+    .divider{width:8px;background:var(--muted);border-radius:8px;cursor:col-resize}
+
+    /* Modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:60}
+    .modal .box{background:var(--panel);border:var(--border);border-radius:16px;box-shadow:var(--shadow);padding:1rem;max-width:720px;width:92vw;max-height:80vh;overflow:auto}
+    .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+    .row>input{flex:1}
+    .list{display:grid;gap:.4rem;margin-top:.5rem}
+    .list .item{display:flex;gap:.5rem;align-items:center;justify-content:space-between;background:var(--muted);border:var(--border);padding:.5rem .6rem;border-radius:10px}
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <strong>⚡ Personal Meta‑Browser</strong>
+      <span class="pill hint">Pro MVP</span>
+      <div class="spacer"></div>
+      <button id="themeBtn" class="btn ghost" title="Toggle theme">🌓 Theme</button>
+      <button id="settingsBtn" class="btn ghost" title="Search engines & groups">⚙️ Settings</button>
+      <button id="bmBtn" class="btn ghost" title="Bookmarks">⭐ Bookmarks</button>
+      <button id="newTabBtn" class="btn" title="New tab (Ctrl+T)">➕ New Tab</button>
+    </header>
+
+    <!-- Quick Answers panel (AI‑like local helpers) -->
+    <section id="qa" class="panel qa"></section>
+
+    <section class="topbar" style="gap:.6rem;flex-wrap:wrap">
+      <select id="engine"></select>
+      <input id="q" type="text" placeholder="Search or: yt cats • wiki kenya • 2+2*5 • 10km to mi…" style="flex:1;min-width:220px" />
+      <button id="micBtn" class="btn ghost" title="Voice search">🎤</button>
+      <button id="goBtn" class="btn" title="Search (Enter)">🔎 Search</button>
+      <button id="backBtn" class="btn ghost" title="Back (Alt+←)">⬅️</button>
+      <button id="fwdBtn" class="btn ghost" title="Forward (Alt+→)">➡️</button>
+      <button id="reloadBtn" class="btn ghost" title="Reload (Ctrl+R)">🔁</button>
+      <button id="pipBtn" class="btn yellow" title="Floating mini‑player for YouTube">📺 Mini</button>
+      <button id="splitBtn" class="btn ghost" title="Toggle split‑screen">🪟 Split</button>
+      <button id="starBtn" class="btn ghost" title="Bookmark this tab">⭐ Save</button>
+    </section>
+
+    <div class="tabs-wrap">
+      <nav id="groups" class="row"></nav>
+      <nav class="tabs" id="tabs"></nav>
+    </div>
+
+    <section class="browser">
+      <div class="hint">
+        Default engine saved locally · Shortcuts: <span class="kbd">yt</span>, <span class="kbd">wiki</span>, <span class="kbd">gh</span>, <span class="kbd">so</span> · Engines: <span class="kbd">Ctrl+1</span> Google, <span class="kbd">Ctrl+2</span> Bing, <span class="kbd">Ctrl+3</span> Duck · Groups filter above
+      </div>
+
+      <div id="split" class="split-wrap">
+        <!-- single view by default -->
+        <iframe id="view" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation-by-user-activation"></iframe>
+      </div>
+    </section>
+  </div>
+
+  <!-- Floating mini player -->
+  <div id="mini" class="mini-player" style="display:none">
+    <div class="mini-header">
+      <span class="drag">Drag • Mini‑player</span>
+      <div><button id="miniClose" class="btn red">✖</button></div>
+    </div>
+    <iframe id="miniFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen frameborder="0" style="width:100%;height: calc(100% - 32px);"></iframe>
+  </div>
+
+  <!-- Settings Modal: custom engines & groups -->
+  <div id="settings" class="modal">
+    <div class="box">
+      <h3>⚙️ Settings</h3>
+      <h4>Search Engines</h4>
+      <div class="row">
+        <input id="seName" placeholder="Name (e.g., Google)" />
+        <input id="seTpl" placeholder="URL template with {q} (e.g., https://www.google.com/search?q={q})" />
+        <button id="seAdd" class="btn">Add / Update</button>
+      </div>
+      <div id="seList" class="list"></div>
+      <hr/>
+      <h4>Tab Groups</h4>
+      <div class="row">
+        <input id="grpName" placeholder="Group name (e.g., Research)" />
+        <button id="grpAdd" class="btn">Add Group</button>
+      </div>
+      <div id="grpList" class="list"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:.5rem">
+        <button id="closeSettings" class="btn ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bookmarks Modal -->
+  <div id="bm" class="modal">
+    <div class="box">
+      <h3>⭐ Bookmarks</h3>
+      <div id="bmList" class="list"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:.5rem">
+        <button id="closeBm" class="btn ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const el = id => document.getElementById(id);
+    const engineSel = el('engine');
+    const q = el('q');
+    const micBtn = el('micBtn');
+    const goBtn = el('goBtn');
+    const backBtn = el('backBtn');
+    const fwdBtn = el('fwdBtn');
+    const reloadBtn = el('reloadBtn');
+    const themeBtn = el('themeBtn');
+    const pipBtn = el('pipBtn');
+    const tabsEl = el('tabs');
+    const view = el('view');
+    const splitWrap = el('split');
+
+    const mini = el('mini');
+    const miniFrame = el('miniFrame');
+    const miniClose = el('miniClose');
+
+    const qaPanel = el('qa');
+
+    const settingsBtn = el('settingsBtn');
+    const settings = el('settings');
+    const seName = el('seName');
+    const seTpl = el('seTpl');
+    const seAdd = el('seAdd');
+    const seList = el('seList');
+
+    const grpName = el('grpName');
+    const grpAdd = el('grpAdd');
+    const grpList = el('grpList');
+    const groupsBar = el('groups');
+
+    const bmBtn = el('bmBtn');
+    const starBtn = el('starBtn');
+    const bm = el('bm');
+    const bmList = el('bmList');
+    const closeBm = el('closeBm');
+
+    const splitBtn = el('splitBtn');
+
+    // --- State ---
+    const LS = {
+      engine: 'mvp_engine',
+      history: 'mvp_history',
+      theme: 'mvp_theme',
+      tabs: 'mvp_tabs',
+      engines: 'mvp_engines',
+      groups: 'mvp_groups',
+      bookmarks: 'mvp_bookmarks'
+    };
+
+    // Default engines
+    const DEFAULT_ENGINES = {
+      google: { name: 'Google', tpl: 'https://www.google.com/search?q={q}' },
+      bing:   { name: 'Bing', tpl: 'https://www.bing.com/search?q={q}' },
+      duck:   { name: 'DuckDuckGo', tpl: 'https://duckduckgo.com/html/?q={q}' },
+      yahoo:  { name: 'Yahoo', tpl: 'https://search.yahoo.com/search?p={q}' },
+      ecosia: { name: 'Ecosia', tpl: 'https://www.ecosia.org/search?q={q}' }
+    };
+
+    function getEngines(){
+      const stored = JSON.parse(localStorage.getItem(LS.engines)||'null');
+      return stored && Object.keys(stored).length ? stored : DEFAULT_ENGINES;
+    }
+
+    function saveEngines(map){ localStorage.setItem(LS.engines, JSON.stringify(map)); }
+
+    // Quick prefixes -> direct site searches
+    const SHORTCUTS = {
+      yt: term => `https://www.youtube.com/results?search_query=${encodeURIComponent(term)}`,
+      wiki: term => `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(term)}`,
+      gh: term => `https://github.com/search?q=${encodeURIComponent(term)}`,
+      so: term => `https://stackoverflow.com/search?q=${encodeURIComponent(term)}`
+    };
+
+    // Groups
+    function getGroups(){ return JSON.parse(localStorage.getItem(LS.groups)||'[]'); }
+    function saveGroups(arr){ localStorage.setItem(LS.groups, JSON.stringify(arr)); renderGroups(); }
+
+    // Tabs model
+    let tabs = [];
+    let active = -1;
+    let activeGroup = '';
+    let engines = getEngines();
+    let isSplit = false;
+
+    function saveTabs(){ localStorage.setItem(LS.tabs, JSON.stringify({tabs, active, activeGroup, isSplit})); }
+    function loadTabs(){
+      try{
+        const s = JSON.parse(localStorage.getItem(LS.tabs)||'null');
+        if(s && Array.isArray(s.tabs)) { tabs = s.tabs; active = s.active; activeGroup = s.activeGroup||''; isSplit = !!s.isSplit; }
+      }catch(e){}
+      if(tabs.length===0){
+        newTab({title:'Welcome', url:tplQuery(engines.duck.tpl,'hello world'), group:''});
+      } else {
+        renderTabs();
+        renderGroups();
+        setActive(active>=0?active:0);
+        if(isSplit) enableSplit();
+      }
+    }
+
+    // Per‑tab history
+    function pushToTabHistory(idx, url){
+      const t = tabs[idx];
+      t.hist = t.hist||{stack:[], i:-1};
+      if(t.hist.i < t.hist.stack.length-1){ t.hist.stack = t.hist.stack.slice(0, t.hist.i+1); }
+      t.hist.stack.push(url); t.hist.i++;
+    }
+    function canGoBack(){ const t = tabs[active]; return t && t.hist && t.hist.i>0; }
+    function canGoFwd(){ const t = tabs[active]; return t && t.hist && t.hist.i < t.hist.stack.length-1; }
+    function goBack(){ if(!canGoBack()) return; const t = tabs[active]; t.hist.i--; loadURL(t.hist.stack[t.hist.i], false); }
+    function goFwd(){ if(!canGoFwd()) return; const t = tabs[active]; t.hist.i++; loadURL(t.hist.stack[t.hist.i], false); }
+
+    function renderTabs(){
+      tabsEl.innerHTML = '';
+      tabs.forEach((t, i)=>{
+        if(activeGroup && t.group!==activeGroup) return; // filter by group
+        const tab = document.createElement('div');
+        tab.className = 'tab'+(i===active?' active':'');
+        tab.setAttribute('draggable','true');
+        tab.dataset.idx = i;
+        const tag = t.group ? `<span class="pill">${t.group}</span>`: '';
+        tab.innerHTML = `${tag}<span>🗂️</span><span class="label">${t.title||'Tab'}</span><span class="close" title="Close">✖</span>`;
+        tab.addEventListener('click', (e)=>{
+          if(e.target.classList.contains('close')) { closeTab(i); }
+          else { setActive(i); }
+        });
+        tab.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', i); });
+        tab.addEventListener('dragover', e=>{ e.preventDefault(); });
+        tab.addEventListener('drop', e=>{
+          e.preventDefault();
+          const from = +e.dataTransfer.getData('text/plain');
+          const to = i;
+          if(from===to) return;
+          const [moved] = tabs.splice(from,1);
+          tabs.splice(to,0,moved);
+          if(active===from) active = to; else if(from<active && to>=active) active--; else if(from>active && to<=active) active++;
+          renderTabs(); saveTabs();
+        });
+        tabsEl.appendChild(tab);
+      });
+    }
+
+    function renderGroups(){
+      const arr = getGroups();
+      groupsBar.innerHTML = '';
+      const all = document.createElement('span');
+      all.className = 'group-chip'+(activeGroup?'':' active');
+      all.textContent = 'All';
+      all.addEventListener('click', ()=>{ activeGroup=''; renderTabs(); saveTabs(); });
+      groupsBar.appendChild(all);
+      arr.forEach(g=>{
+        const chip = document.createElement('span');
+        chip.className = 'group-chip'+(activeGroup===g?' active':'');
+        chip.textContent = g;
+        chip.addEventListener('click', ()=>{ activeGroup=g; renderTabs(); saveTabs(); });
+        groupsBar.appendChild(chip);
+      });
+    }
+
+    function setActive(i){ active = i; const t=tabs[i]; if(!t) return; renderTabs(); (isSplit?setLeft(t.url):view.src = t.url); document.title = `(${i+1}) ${t.title} – Meta‑Browser`; saveTabs(); }
+
+    function closeTab(i){
+      if(tabs.length===1){ tabs[0] = {title:'New Tab', url:'about:blank', group:'', hist:{stack:[],i:-1}}; active=0; renderTabs(); (isSplit?setLeft('about:blank'):view.src='about:blank'); saveTabs(); return; }
+      tabs.splice(i,1);
+      if(active>=tabs.length) active = tabs.length-1;
+      renderTabs(); saveTabs(); setActive(active);
+    }
+
+    function newTab(seed){
+      tabs.push({ title: seed?.title || 'New Tab', url: seed?.url || 'about:blank', group: seed?.group||'', hist: {stack: seed?.url?[seed.url]:[], i: seed?.url?0:-1} });
+      active = tabs.length-1; renderTabs(); setActive(active); saveTabs();
+    }
+
+    // Minimal search history
+    function saveHistory(term){
+      const arr = JSON.parse(localStorage.getItem(LS.history)||'[]');
+      const next = [term, ...arr.filter(x=>x!==term)].slice(0,5);
+      localStorage.setItem(LS.history, JSON.stringify(next));
+      renderHistoryChips();
+    }
+    function renderHistoryChips(){
+      const chips = JSON.parse(localStorage.getItem(LS.history)||'[]');
+      let hint = document.querySelector('.hint');
+      const extras = document.createElement('span');
+      extras.style.marginLeft = '.5rem';
+      extras.innerHTML = chips.map(c=>`<span class="history-chip" data-term="${c}">${c}</span>`).join(' ');
+      const base = `Default engine saved locally · Shortcuts: <span class="kbd">yt</span>, <span class="kbd">wiki</span>, <span class="kbd">gh</span>, <span class="kbd">so</span> · Engines: <span class="kbd">Ctrl+1</span> Google, <span class="kbd">Ctrl+2</span> Bing, <span class="kbd">Ctrl+3</span> Duck · Groups filter above`;
+      hint.innerHTML = base + (chips.length? ` · Recent: ` : '') ;
+      if(chips.length) hint.appendChild(extras);
+      hint.querySelectorAll('.history-chip').forEach(ch=>{ ch.addEventListener('click', ()=>{ q.value = ch.dataset.term; doSearch(); }); });
+    }
+
+    // Theme
+    function applyTheme(){ const t = localStorage.getItem(LS.theme)||'dark'; document.documentElement.setAttribute('data-theme', t); }
+    function toggleTheme(){ const t = document.documentElement.getAttribute('data-theme')==='light'?'dark':'light'; localStorage.setItem(LS.theme, t); applyTheme(); }
+
+    // Engines UI
+    function tplQuery(tpl, query){ return tpl.replace('{q}', encodeURIComponent(query)); }
+    function loadEngineSelect(){
+      engines = getEngines();
+      engineSel.innerHTML = '';
+      Object.entries(engines).forEach(([key, obj])=>{
+        const opt = document.createElement('option'); opt.value = key; opt.textContent = obj.name; engineSel.appendChild(opt);
+      });
+      const e = localStorage.getItem(LS.engine);
+      if(e && engines[e]) engineSel.value = e; else engineSel.value = Object.keys(engines)[0];
+    }
+    function saveEngine(){ localStorage.setItem(LS.engine, engineSel.value); }
+
+    // Voice search
+    function startVoice(){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if(!SR){ alert('Voice search not supported in this browser.'); return; }
+      const rec = new SR();
+      rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+      rec.onresult = (e)=>{ const text = e.results[0][0].transcript; q.value = text; doSearch(); };
+      rec.onerror = ()=>{};
+      rec.start();
+    }
+
+    // Quick Answers (local, no network): math + simple unit conversions
+    function tryQuickAnswer(input){
+      // Unit conversions: supports km<->mi, m<->ft, kg<->lb, c<->f
+      const u = input.trim().toLowerCase();
+      const conv = [
+        [/^(\d+(?:\.\d+)?)\s?km\s+to\s+mi$/, m=> `${(+m[1]*0.621371).toFixed(3)} mi`],
+        [/^(\d+(?:\.\d+)?)\s?mi\s+to\s+km$/, m=> `${(+m[1]/0.621371).toFixed(3)} km`],
+        [/^(\d+(?:\.\d+)?)\s?m\s+to\s+ft$/, m=> `${(+m[1]*3.28084).toFixed(3)} ft`],
+        [/^(\d+(?:\.\d+)?)\s?ft\s+to\s+m$/, m=> `${(+m[1]/3.28084).toFixed(3)} m`],
+        [/^(\d+(?:\.\d+)?)\s?kg\s+to\s+lb$/, m=> `${(+m[1]*2.20462).toFixed(3)} lb`],
+        [/^(\d+(?:\.\d+)?)\s?lb\s+to\s+kg$/, m=> `${(+m[1]/2.20462).toFixed(3)} kg`],
+        [/^(\-?\d+(?:\.\d+)?)\s?c\s+to\s+f$/, m=> `${((+m[1]*9/5)+32).toFixed(2)} °F`],
+        [/^(\-?\d+(?:\.\d+)?)\s?f\s+to\s+c$/, m=> `${((+m[1]-32)*5/9).toFixed(2)} °C`]
+      ];
+      for(const [re, fn] of conv){ const m = u.match(re); if(m){ return {title:'Quick convert', body: fn(m)}; } }
+      // Math expression
+      if(/^[0-9\s\+\-\*\/\(\)\.\^%]+$/.test(u)){
+        try{
+          // safe-ish eval (no identifiers)
+          const res = Function('return ('+u.replace(/\^/g,'**')+')')();
+          if(typeof res === 'number' && isFinite(res)) return {title:'Quick math', body: String(res)};
+        }catch(_){ }
+      }
+      return null;
+    }
+
+    function showQA(ans){
+      if(!ans){ qaPanel.style.display='none'; qaPanel.innerHTML=''; return; }
+      qaPanel.style.display='block';
+      qaPanel.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center"><strong>⚡ ${ans.title}</strong><span class="hint">Press Enter to continue to web</span></div><div style="margin-top:.4rem">${ans.body}</div>`;
+    }
+
+    // Resolve input -> URL
+    function resolveURL(text){
+      const parts = text.trim().split(/\s+/);
+      if(parts.length>1 && SHORTCUTS[parts[0]]){ const term = parts.slice(1).join(' '); return SHORTCUTS[parts[0]](term); }
+      if(/^(https?:\/\/|www\.)/i.test(text)){ return text.startsWith('http') ? text : 'https://' + text; }
+      const e = engines[engineSel.value];
+      return tplQuery(e.tpl, text);
+    }
+    function titleFromQuery(text){
+      if(/^(https?:\/\/|www\.)/i.test(text)) return new URL(text.startsWith('http')?text:'https://'+text).hostname;
+      const parts = text.trim().split(/\s+/);
+      if(parts.length>1 && SHORTCUTS[parts[0]]) return `${parts[0]}: ${parts.slice(1).join(' ')}`;
+      return `${engines[engineSel.value].name}: ${text}`;
+    }
+
+    function loadURL(url, pushHistory=true){ if(active<0) newTab(); tabs[active].url = url; if(pushHistory) pushToTabHistory(active, url); if(isSplit) setLeft(url); else view.src = url; renderTabs(); saveTabs(); }
+
+    function doSearch(){
+      const text = q.value.trim(); if(!text) return;
+      const ans = tryQuickAnswer(text);
+      if(ans){ showQA(ans); } else { showQA(null); }
+      const url = resolveURL(text);
+      const title = titleFromQuery(text);
+      if(active<0) newTab(); tabs[active].title = title; renderTabs();
+      loadURL(url, true);
+      saveHistory(text);
+    }
+
+    // Buttons & inputs
+    goBtn.addEventListener('click', doSearch);
+    q.addEventListener('input', ()=>{ const a = tryQuickAnswer(q.value||''); showQA(a); });
+    q.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doSearch(); }});
+    engineSel.addEventListener('change', ()=>{ saveEngine(); q.focus(); });
+
+    backBtn.addEventListener('click', ()=>goBack());
+    fwdBtn.addEventListener('click', ()=>goFwd());
+    reloadBtn.addEventListener('click', ()=>{ const t=tabs[active]; if(t) (isSplit?setLeft(t.url):view.src=t.url); });
+
+    themeBtn.addEventListener('click', toggleTheme);
+    micBtn.addEventListener('click', startVoice);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if(e.ctrlKey && !e.shiftKey && !e.altKey){
+        if(e.key==='1'){ engineSel.value='google'; saveEngine(); e.preventDefault(); return; }
+        if(e.key==='2'){ engineSel.value='bing'; saveEngine(); e.preventDefault(); return; }
+        if(e.key==='3'){ engineSel.value='duck'; saveEngine(); e.preventDefault(); return; }
+        if(e.key.toLowerCase()==='t'){ newTab({title:'New Tab', url:'about:blank', group:activeGroup}); e.preventDefault(); return; }
+        if(e.key.toLowerCase()==='r'){ const t=tabs[active]; if(t){ if(isSplit) setLeft(t.url); else view.src=t.url; } e.preventDefault(); return; }
+        if(e.key.toLowerCase()==='b'){ toggleBookmarks(); e.preventDefault(); return; }
+        if(e.key.toLowerCase()==='e'){ toggleSettings(); e.preventDefault(); return; }
+      }
+      if(e.altKey && !e.ctrlKey){
+        if(e.key==='ArrowLeft'){ goBack(); e.preventDefault(); }
+        if(e.key==='ArrowRight'){ goFwd(); e.preventDefault(); }
+      }
+    });
+
+    // New tab
+    el('newTabBtn').addEventListener('click', ()=> newTab({title:'New Tab', url:'about:blank', group:activeGroup}));
+
+    // Mini‑player
+    function showMiniPlayer(url){
+      try{
+        const u = new URL(url);
+        let embed = '';
+        if(u.hostname.includes('youtube.com')){
+          const v = u.searchParams.get('v'); if(v) embed = `https://www.youtube.com/embed/${v}?autoplay=1`;
+        } else if(u.hostname==='youtu.be'){
+          const id = u.pathname.replace('/',''); if(id) embed = `https://www.youtube.com/embed/${id}?autoplay=1`;
+        } else { alert('Mini‑player works with individual YouTube video links.'); return; }
+        if(embed){ miniFrame.src = embed; mini.style.display='block'; }
+      }catch(_){ alert('Provide a valid YouTube video URL first.'); }
+    }
+    pipBtn.addEventListener('click', ()=>{ const t = tabs[active]; if(!t){ alert('No active tab'); return; } showMiniPlayer(t.url); });
+    miniClose.addEventListener('click', ()=>{ miniFrame.src='about:blank'; mini.style.display='none'; });
+    (function draggable(){ let isDown=false, sx=0, sy=0, ox=0, oy=0; const header = mini.querySelector('.mini-header'); const onDown = (e)=>{ isDown=true; sx=e.clientX; sy=e.clientY; const r=mini.getBoundingClientRect(); ox=r.left; oy=r.top; }; const onMove = (e)=>{ if(!isDown) return; const dx=e.clientX-sx, dy=e.clientY-sy; mini.style.right='auto'; mini.style.bottom='auto'; mini.style.left=(ox+dx)+'px'; mini.style.top=(oy+dy)+'px'; }; const onUp = ()=>{ isDown=false; }; header.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); })();
+
+    // Split‑screen
+    let rightFrame = null; let divider = null; let leftW = 50; // percent
+    function enableSplit(){
+      if(isSplit) return; isSplit = true; splitWrap.classList.add('split','two');
+      splitWrap.style.setProperty('--left', leftW+'%'); splitWrap.style.setProperty('--right', (100-leftW)+'%');
+      const left = document.createElement('iframe'); left.id='view'; left.sandbox = view.sandbox; left.src = tabs[active]?.url||'about:blank';
+      const div = document.createElement('div'); div.className='divider';
+      const right = document.createElement('iframe'); right.id='view2'; right.sandbox = view.sandbox; right.src = 'about:blank';
+      splitWrap.innerHTML=''; splitWrap.appendChild(left); splitWrap.appendChild(div); splitWrap.appendChild(right);
+      divider = div; rightFrame = right;
+      // drag to resize
+      let down=false, sx=0; div.addEventListener('mousedown', e=>{ down=true; sx=e.clientX; });
+      window.addEventListener('mousemove', e=>{ if(!down) return; const rect = splitWrap.getBoundingClientRect(); const pct = Math.min(85, Math.max(15, (e.clientX-rect.left)/rect.width*100)); leftW = pct; splitWrap.style.setProperty('--left', leftW+'%'); splitWrap.style.setProperty('--right', (100-leftW)+'%'); });
+      window.addEventListener('mouseup', ()=>{ if(down){ down=false; saveTabs(); }});
+    }
+    function disableSplit(){ isSplit=false; splitWrap.classList.remove('split','two'); splitWrap.innerHTML=''; const single = document.createElement('iframe'); single.id='view'; single.sandbox = view.sandbox; single.src = tabs[active]?.url||'about:blank'; splitWrap.appendChild(single); }
+    function setLeft(url){ const f = splitWrap.querySelector('#view'); if(f) f.src = url; }
+    function setRight(url){ if(!rightFrame) return; rightFrame.src = url; }
+    splitBtn.addEventListener('click', ()=>{ if(isSplit) { disableSplit(); } else { enableSplit(); } saveTabs(); });
+
+    // Bookmarks
+    function getBookmarks(){ return JSON.parse(localStorage.getItem(LS.bookmarks)||'[]'); }
+    function saveBookmarks(list){ localStorage.setItem(LS.bookmarks, JSON.stringify(list)); renderBookmarks(); }
+    function toggleBookmarks(){ bm.style.display = bm.style.display==='flex' ? 'none' : 'flex'; if(bm.style.display==='flex') renderBookmarks(); }
+    function renderBookmarks(){ const list = getBookmarks(); bmList.innerHTML=''; list.forEach((b,idx)=>{ const item=document.createElement('div'); item.className='item'; item.innerHTML=`<span>🔖 <strong>${b.title}</strong> — <span class='hint'>${b.url}</span></span><span class='row'><button data-open='${idx}' class='btn'>Open</button><button data-split='${idx}' class='btn ghost'>Open Right</button><button data-rename='${idx}' class='btn ghost'>Rename</button><button data-del='${idx}' class='btn red'>Delete</button></span>`; bmList.appendChild(item); });
+      bmList.querySelectorAll('button').forEach(btn=>{
+        const i = +btn.dataset.open || +btn.dataset.del || +btn.dataset.rename || +btn.dataset.split;
+        if(btn.dataset.open!==undefined) btn.addEventListener('click',()=>{ const b=getBookmarks()[i]; if(!b) return; q.value=b.title; tabs[active].title=b.title; loadURL(b.url,true); bm.style.display='none'; });
+        if(btn.dataset.split!==undefined) btn.addEventListener('click',()=>{ const b=getBookmarks()[i]; if(!b) return; if(!isSplit) enableSplit(); setRight(b.url); bm.style.display='none'; });
+        if(btn.dataset.rename!==undefined) btn.addEventListener('click',()=>{ const list=getBookmarks(); const name=prompt('Rename bookmark', list[i].title)||list[i].title; list[i].title=name; saveBookmarks(list); });
+        if(btn.dataset.del!==undefined) btn.addEventListener('click',()=>{ const list=getBookmarks(); list.splice(i,1); saveBookmarks(list); });
+      });
+    }
+    starBtn.addEventListener('click', ()=>{ const t=tabs[active]; if(!t) return; const list=getBookmarks(); list.unshift({title:t.title||'Saved', url:t.url}); saveBookmarks(list.slice(0,200)); alert('Bookmarked!'); });
+    bmBtn.addEventListener('click', toggleBookmarks);
+    closeBm.addEventListener('click', toggleBookmarks);
+
+    // Settings
+    function toggleSettings(){ settings.style.display = settings.style.display==='flex' ? 'none' : 'flex'; if(settings.style.display==='flex'){ renderSeList(); renderGrpList(); } }
+    settingsBtn.addEventListener('click', toggleSettings);
+    el('closeSettings').addEventListener('click', toggleSettings);
+
+    function renderSeList(){ const map = getEngines(); seList.innerHTML=''; Object.entries(map).forEach(([key,obj])=>{ const item=document.createElement('div'); item.className='item'; item.innerHTML=`<span>🔎 <strong>${obj.name}</strong> <span class='hint'>${obj.tpl}</span></span><span class='row'><button data-key='${key}' class='btn ghost'>Use</button><button data-ed='${key}' class='btn'>Edit</button><button data-del='${key}' class='btn red'>Delete</button></span>`; seList.appendChild(item); });
+      seList.querySelectorAll('button').forEach(b=>{
+        if(b.dataset.key){ b.addEventListener('click',()=>{ engineSel.value=b.dataset.key; saveEngine(); loadEngineSelect(); }); }
+        if(b.dataset.ed){ b.addEventListener('click',()=>{ const k=b.dataset.ed; seName.value=getEngines()[k].name; seTpl.value=getEngines()[k].tpl; }); }
+        if(b.dataset.del){ b.addEventListener('click',()=>{ const k=b.dataset.del; const map=getEngines(); delete map[k]; saveEngines(map); loadEngineSelect(); renderSeList(); }); }
+      });
+    }
+    seAdd.addEventListener('click', ()=>{
+      const name=seName.value.trim(); const tpl=seTpl.value.trim(); if(!name||!tpl||!tpl.includes('{q}')) { alert('Provide name and template containing {q}'); return; }
+      const key = name.toLowerCase().replace(/[^a-z0-9]+/g,''); const map=getEngines(); map[key] = {name, tpl}; saveEngines(map); loadEngineSelect(); renderSeList(); seName.value=''; seTpl.value='';
+    });
+
+    function renderGrpList(){ const arr=getGroups(); grpList.innerHTML=''; arr.forEach((g,idx)=>{ const item=document.createElement('div'); item.className='item'; item.innerHTML=`<span>🏷️ <strong>${g}</strong></span><span class='row'><button data-assign='${g}' class='btn'>Assign to Active Tab</button><button data-del='${idx}' class='btn red'>Delete</button></span>`; grpList.appendChild(item); });
+      grpList.querySelectorAll('button').forEach(b=>{
+        if(b.dataset.assign){ b.addEventListener('click',()=>{ if(tabs[active]){ tabs[active].group = b.dataset.assign; renderTabs(); saveTabs(); }}); }
+        if(b.dataset.del){ b.addEventListener('click',()=>{ const arr=getGroups(); arr.splice(+b.dataset.del,1); saveGroups(arr); renderGrpList(); }); }
+      });
+    }
+    grpAdd.addEventListener('click', ()=>{ const name=grpName.value.trim(); if(!name) return; const arr=getGroups(); if(!arr.includes(name)) arr.push(name); saveGroups(arr); grpName.value=''; renderGrpList(); renderGroups(); });
+
+    // Init engines select + history + tabs
+    function loadEngine(){ const e = localStorage.getItem(LS.engine); if(e && getEngines()[e]) engineSel.value = e; }
+
+    // Initial load
+    (function init(){
+      applyTheme();
+      loadEngineSelect();
+      loadEngine();
+      renderHistoryChips();
+      loadTabs();
+      engineSel.title = 'Default engine (saved)';
+      setTimeout(()=>q.focus(), 50);
+    })();
+  })();
+  </script>
+</body>
+</html>
